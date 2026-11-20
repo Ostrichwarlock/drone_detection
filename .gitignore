@@ -1,0 +1,13 @@
+# data, weights and outputs stay local
+.venv/
+__pycache__/
+drone_data/
+runs/
+preds/
+demo_out/
+results/
+*.pt
+*.onnx
+*.hef
+*.mp4
+*.cache
