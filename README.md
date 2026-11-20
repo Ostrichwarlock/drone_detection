@@ -45,7 +45,38 @@ Score all practice videos:
     python pipeline.py --videos ../test_sample_clean --dets preds/x --out preds/x_trk --weights <best.pt> --no-motion
     python eval_track.py --gt ../test_sample_clean --pred preds/x_trk
 
-Pi-style timing (threaded reader / model / tracker): `python pi_run.py --help`.
+Pi-style timing on the Mac (same code, PyTorch instead of Hailo): `python pi_run.py <video.mp4>`.
+
+## Raspberry Pi 5 + AI HAT+ (Hailo-8)
+
+Status: the Pi code path (`pi_run.py --backend hailo`) is written but **not tested on a Pi yet**, and the 50 fps target is not measured yet.
+
+**1. Export the model (on the Mac)** to ONNX:
+
+    python -c "from ultralytics import YOLO; YOLO('runs/ft_hack/weights/best.pt').export(format='onnx', imgsz=1280, opset=11)"
+
+**2. Compile ONNX to .hef (x86 Linux PC, not the Mac or the Pi).** Install the Hailo Dataflow Compiler
+(free download from the Hailo Developer Zone, needs an account), then parse, quantize with ~500 calibration frames
+from our videos, and compile for `hailo8`, with NMS included in the .hef. Copy the resulting `skyguard.hef` to the Pi.
+
+**3. Set up the Pi** (Raspberry Pi OS 64-bit, AI HAT+ attached):
+
+    sudo apt update && sudo apt install hailo-all     # Hailo driver + HailoRT + Python bindings, then reboot
+    hailortcli fw-control identify                    # should list the Hailo-8
+    git clone https://github.com/czarekkdev/drone_detection && cd drone_detection
+    python -m venv --system-site-packages .venv && source .venv/bin/activate   # system site = hailo_platform
+    pip install opencv-python numpy scipy
+
+**4. Run on the Pi:**
+
+    python pi_run.py video.mp4 --backend hailo --hef skyguard.hef                  # one video
+    python pi_run.py data --backend hailo --hef skyguard.hef --out results         # folder of <video>/video.mp4
+    python pi_run.py 0 --backend hailo --hef skyguard.hef                          # live camera
+    python pi_run.py video.mp4 --backend hailo --hef skyguard.hef --realtime       # feed at the video's own fps
+
+It prints end-to-end fps and ms per stage (read / model / tracker); the slowest stage is the fps limit.
+Results go to `results/<video folder name>.txt`. The tracker takes under 1 ms per frame, so the model sets the speed.
+If 1280 px is too slow on the Hailo, export at 960 or 640 and compare fps and scores.
 
 ## Training
 
