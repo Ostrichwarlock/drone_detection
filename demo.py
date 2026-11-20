@@ -25,6 +25,7 @@ p.add_argument("--show", action="store_true")
 p.add_argument("--view", type=int, default=1, help="start view 0-10 (10 = brightness shape, key b)")
 p.add_argument("--motion", action="store_true", help="start with motion crops on (press m to toggle)"); p.add_argument("--no-pred", action="store_true")
 p.add_argument("--out", default="demo_out")
+p.add_argument("--clean", action="store_true", help="no status text, no gt boxes (for showing people)")
 p.add_argument("--no-save", action="store_true", help="don't write the output video (faster)")
 a = p.parse_args()
 dev = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -55,7 +56,7 @@ traj, TRAIL = True, {}  # TRAIL: id -> last 30 centres
 
 def draw(img, out):
     I = S.info
-    for (x, y, w, h) in gt.get(n, []):
+    for (x, y, w, h) in ([] if a.clean else gt.get(n, [])):
         cv2.rectangle(img, (int(x), int(y)), (int(x + w), int(y + h)), (255, 255, 255), 1)
     if overlays:
         for x, y, w, h, *_ in I.get("spots", []):
@@ -127,7 +128,8 @@ while True:
     else:
         img = cam
     fps = n / (time.time() - t0)
-    cv2.putText(img, f"frame {n}  {fps:.0f} fps  view {view}: {VIEWS[view]}  motion {'on' if S.use_motion else 'off'}  pred {'on' if S.use_pred else 'off'}  traj {'on' if traj else 'off'}",
+    if not a.clean:
+      cv2.putText(img, f"frame {n}  {fps:.0f} fps  view {view}: {VIEWS[view]}  motion {'on' if S.use_motion else 'off'}  pred {'on' if S.use_pred else 'off'}  traj {'on' if traj else 'off'}",
                 (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
     if not paused and not a.no_save:
         writer.write(img)

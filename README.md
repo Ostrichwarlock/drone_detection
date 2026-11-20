@@ -35,6 +35,8 @@ Demo with switchable views:
     python demo.py ../test_sample_clean/test_6_hard_PXL_20261113_154422245_hard/video.mp4 --show
     python demo.py 0 --show            # live camera
 
+Add `--clean` to hide the status text and answer boxes (nice for showing people).
+
 Keys: 1 camera, 2 difference, 3 motion mask, 4 four-way view, 5 short diff, 6 long diff, 7 background diff,
 8 tracker map, 9 previous frame, b brightness shape, 0 all layers, t trajectory, m motion crops, p trajectory crops,
 o helper boxes, space pause, q quit.
