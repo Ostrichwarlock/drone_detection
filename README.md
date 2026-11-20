@@ -51,13 +51,15 @@ Pi-style timing on the Mac (same code, PyTorch instead of Hailo): `python pi_run
 
 Everything except the Hailo compile runs on Windows 10/11 the same way. In PowerShell:
 
-    git clone https://github.com/czarekkdev/drone_detection
-    cd drone_detection
+    cd "drone detecting"                 # the folder that holds pretrained\, test_sample_clean\, datasets
+    git clone https://github.com/czarekkdev/drone_detection code
+    cd code
     py -3.11 -m venv .venv
     .venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
     # NVIDIA GPU: install the CUDA build of PyTorch first (skip this line for CPU only)
     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
     pip install -r requirements.txt
+    python -c "import torch; print(torch.cuda.is_available())"     # True = GPU will be used
 
 Folder layout is the same as on the Mac: the repo folder next to `pretrained\`, `test_sample_clean\` and the datasets,
 e.g. `..\test_sample_clean\<video folder>\video.mp4`. Then the commands above work unchanged, for example:
@@ -71,6 +73,9 @@ Notes:
 - The scripts pick the device themselves (CUDA GPU if there is one, otherwise CPU; `--device cpu` forces CPU).
   On CPU the demo runs at only a few fps.
 - Put paths with spaces in quotes.
+- GPU with less than 6 GB memory: train with `--batch 8`.
+- If training can't find the images, put the full path on the `path:` line of the yaml,
+  e.g. `path: C:/Users/<name>/drone detecting/code/drone_data`.
 - Training works on Windows too (`python finetune.py ...`); with an NVIDIA GPU it is usually faster than the Mac.
 - **Hailo compile on Windows:** install WSL2 with Ubuntu 22.04 (`wsl --install -d Ubuntu-22.04`) and run the
   Hailo Dataflow Compiler inside it; that counts as the x86 Linux PC in step 2 below.
