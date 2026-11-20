@@ -84,15 +84,61 @@ Notes:
 
 Status: the Pi code path (`pi_run.py --backend hailo`) is written but **not tested on a Pi yet**, and the 50 fps target is not measured yet.
 
-**1. Export the model (on the Mac)** to ONNX:
+### Compiling the model for the Pi (.pt -> .onnx -> .hef)
 
-    python -c "from ultralytics import YOLO; YOLO('runs/ft_hack/weights/best.pt').export(format='onnx', imgsz=1280, opset=11)"
+The Hailo chip can't run a PyTorch `.pt` file. It needs a `.hef` file, made by Hailo's compiler, which
+only runs on an **x86 Linux PC** (Ubuntu 22.04), or Windows with **WSL2 Ubuntu 22.04**. Not on the Mac, not on the Pi.
 
-**2. Compile ONNX to .hef (x86 Linux PC, or Windows with WSL2; not the Mac or the Pi).** Install the Hailo Dataflow Compiler
-(free download from the Hailo Developer Zone, needs an account), then parse, quantize with ~500 calibration frames
-from our videos, and compile for `hailo8`, with NMS included in the .hef. Copy the resulting `skyguard.hef` to the Pi.
+**1. Export to ONNX (Mac or any PC, in this folder):**
 
-**3. Set up the Pi** (Raspberry Pi OS 64-bit, AI HAT+ attached):
+    python -c "from ultralytics import YOLO; YOLO('runs/ft_hack/weights/best.pt').export(format='onnx', imgsz=640, opset=11)"
+    # -> runs/ft_hack/weights/best.onnx
+
+Start at 640 (the Hailo Model Zoo default for YOLO11n), measure fps on the Pi, and only then try 960 / 1280
+(1280 is about 4x the work of 640, so it is unlikely to reach 50 fps on the Hailo-8).
+
+**2. Make calibration images (Mac or PC):** the compiler converts the model to 8-bit and needs real-looking frames for that.
+
+    python make_calib.py --videos ../test_sample_clean --images drone_data/val/images --out calib --n 600
+
+**3. Install the Hailo tools (on the Linux / WSL2 machine):**
+
+- Check the HailoRT version on the Pi first: `hailortcli --version`. The compiler must come from the **same Hailo software release**,
+  otherwise the Pi refuses the .hef. For Hailo-8 that means **DFC 3.x + Model Zoo 2.x** (DFC 4.x / Model Zoo 5.x are for Hailo-10).
+- Log in at the Hailo Developer Zone (free account) -> Software Downloads -> Hailo-8 / AI Software Suite, and download for that release:
+  the **Dataflow Compiler** wheel (`hailo_dataflow_compiler-<ver>-py3-none-linux_x86_64.whl`) and the
+  **Model Zoo** (`hailo_model_zoo-<ver>-py3-none-any.whl`, or `git clone https://github.com/hailo-ai/hailo_model_zoo` at the matching tag).
+
+    sudo apt install python3.10-venv python3-dev graphviz libgraphviz-dev
+    python3.10 -m venv hailo && source hailo/bin/activate
+    pip install hailo_dataflow_compiler-*.whl
+    pip install hailo_model_zoo-*.whl          # or: cd hailo_model_zoo && pip install -e .
+    hailo --version && hailomz --help          # both should work
+
+**4. Compile (copy `best.onnx` and the `calib/` folder to that machine):**
+
+    hailomz compile yolov11n --ckpt best.onnx --hw-arch hailo8 --calib-path calib/ --classes 1 --performance
+    mv yolov11n.hef skyguard.hef
+
+- `yolov11n` uses the Model Zoo's YOLO11n recipe, which includes the **NMS post-process on the chip** (pi_run.py expects that).
+- `--classes 1`: our model has one class (drone).
+- `--hw-arch hailo8`: the AI HAT+ 26 TOPS is a Hailo-8 (the 13 TOPS one would be `hailo8l`).
+- `--performance` makes the compiler try harder for speed; it can take 30-60+ min. Drop it for a quick first test.
+- If it complains about the ONNX end nodes, re-export with `opset=11` and `simplify=True`, or pass `--start-node-names` /
+  `--end-node-names` as printed in the error (the Model Zoo docs list the YOLO11 end nodes).
+- Big accuracy drop after the 8-bit conversion: use more and more varied calibration images (e.g. `--n 1000`).
+- For a size other than 640, copy the Model Zoo's `yolov11n.yaml` and change the input shape, then `hailomz compile --yaml my.yaml ...`.
+
+**5. Check the result (on the Pi):**
+
+    hailortcli parse-hef skyguard.hef          # input should be 640x640x3, output an NMS layer
+    hailortcli run skyguard.hef                # raw chip fps, without video decode or tracker
+
+Then copy `skyguard.hef` next to `pi_run.py` and continue below.
+
+### Running on the Pi
+
+**1. Set up the Pi** (Raspberry Pi OS 64-bit, AI HAT+ attached):
 
     sudo apt update && sudo apt install hailo-all     # Hailo driver + HailoRT + Python bindings, then reboot
     hailortcli fw-control identify                    # should list the Hailo-8
@@ -100,7 +146,7 @@ from our videos, and compile for `hailo8`, with NMS included in the .hef. Copy t
     python -m venv --system-site-packages .venv && source .venv/bin/activate   # system site = hailo_platform
     pip install opencv-python numpy scipy
 
-**4. Run on the Pi:**
+**2. Run:**
 
     python pi_run.py video.mp4 --backend hailo --hef skyguard.hef                  # one video
     python pi_run.py data --backend hailo --hef skyguard.hef --out results         # folder of <video>/video.mp4
