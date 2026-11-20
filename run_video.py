@@ -11,9 +11,11 @@ p.add_argument("--videos", required=True)
 p.add_argument("--out", required=True)
 p.add_argument("--imgsz", type=int, default=640)
 p.add_argument("--conf", type=float, default=0.01)
-p.add_argument("--device", default="mps")
+p.add_argument("--device", default="", help="mps / cuda / cpu (default: best available)")
 p.add_argument("--keep", default="", help="comma-separated class names to keep (default: all)")
 a = p.parse_args()
+import torch
+dev = a.device or ("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
 os.makedirs(a.out, exist_ok=True)
 model = YOLO(a.weights)
 classes = None
@@ -33,7 +35,7 @@ for vdir in sorted(glob.glob(os.path.join(a.videos, "*/"))):
         if not ok:
             break
         n += 1  # frame numbers start at 1
-        r = model.predict(frame, imgsz=a.imgsz, conf=a.conf, device=a.device, classes=classes, verbose=False)[0]
+        r = model.predict(frame, imgsz=a.imgsz, conf=a.conf, device=dev, classes=classes, verbose=False)[0]
         for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist()):
             lines.append(f"{n},1,{x1:.2f},{y1:.2f},{x2 - x1:.2f},{y2 - y1:.2f},{c:.4f}")
     with open(os.path.join(a.out, name + ".txt"), "w") as f:

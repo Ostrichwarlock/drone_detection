@@ -47,6 +47,34 @@ Score all practice videos:
 
 Pi-style timing on the Mac (same code, PyTorch instead of Hailo): `python pi_run.py <video.mp4>`.
 
+## Windows
+
+Everything except the Hailo compile runs on Windows 10/11 the same way. In PowerShell:
+
+    git clone https://github.com/czarekkdev/drone_detection
+    cd drone_detection
+    py -3.11 -m venv .venv
+    .venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+    # NVIDIA GPU: install the CUDA build of PyTorch first (skip this line for CPU only)
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+    pip install -r requirements.txt
+
+Folder layout is the same as on the Mac: the repo folder next to `pretrained\`, `test_sample_clean\` and the datasets,
+e.g. `..\test_sample_clean\<video folder>\video.mp4`. Then the commands above work unchanged, for example:
+
+    python demo.py "..\test_sample_clean\test_6_hard_PXL_20261113_154422245_hard\video.mp4" --show
+    python run_video.py --weights ..\pretrained\drone-detection-yolov11\best.pt --videos ..\test_sample_clean --out preds\x --imgsz 1280 --conf 0.01
+    python pipeline.py --videos ..\test_sample_clean --dets preds\x --out preds\x_trk --weights ..\pretrained\drone-detection-yolov11\best.pt --no-motion
+    python eval_track.py --gt ..\test_sample_clean --pred preds\x_trk
+
+Notes:
+- The scripts pick the device themselves (CUDA GPU if there is one, otherwise CPU; `--device cpu` forces CPU).
+  On CPU the demo runs at only a few fps.
+- Put paths with spaces in quotes.
+- Training works on Windows too (`python finetune.py ...`); with an NVIDIA GPU it is usually faster than the Mac.
+- **Hailo compile on Windows:** install WSL2 with Ubuntu 22.04 (`wsl --install -d Ubuntu-22.04`) and run the
+  Hailo Dataflow Compiler inside it; that counts as the x86 Linux PC in step 2 below.
+
 ## Raspberry Pi 5 + AI HAT+ (Hailo-8)
 
 Status: the Pi code path (`pi_run.py --backend hailo`) is written but **not tested on a Pi yet**, and the 50 fps target is not measured yet.
@@ -55,7 +83,7 @@ Status: the Pi code path (`pi_run.py --backend hailo`) is written but **not test
 
     python -c "from ultralytics import YOLO; YOLO('runs/ft_hack/weights/best.pt').export(format='onnx', imgsz=1280, opset=11)"
 
-**2. Compile ONNX to .hef (x86 Linux PC, not the Mac or the Pi).** Install the Hailo Dataflow Compiler
+**2. Compile ONNX to .hef (x86 Linux PC, or Windows with WSL2; not the Mac or the Pi).** Install the Hailo Dataflow Compiler
 (free download from the Hailo Developer Zone, needs an account), then parse, quantize with ~500 calibration frames
 from our videos, and compile for `hailo8`, with NMS included in the .hef. Copy the resulting `skyguard.hef` to the Pi.
 
