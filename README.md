@@ -11,6 +11,11 @@ Target: real time (50 fps or more) on a Raspberry Pi with the AI HAT+ (Hailo-8, 
 3. **Trajectory crops** (`stack.py`): where the tracker expects a drone, a zoomed crop is checked again, which finds small drones the full-frame pass misses.
 4. **Extra input layers** (`layers.py`, for the multi-channel model B, not trained yet): short / long / background difference (camera-shake compensated), tracker map, previous frame, brightness shape.
 5. **Motion detector** (`motion_live.py`): kept for the views; motion crops are off by default (they did not improve the score).
+6. **Combined shape layer** (`consensus.py`, best setup): a pixel counts only where at least 2 of motion / background difference / brightness shape agree (1 is enough near where the tracker expects a drone), cleaned into at most 5 blobs per frame. Used as a second opinion, never to make boxes on its own:
+   - **booster**: a faint detection (confidence 0.10 to 0.30) is trusted (raised to 0.65) when a white blob of similar size sits at the same spot;
+   - **keeper**: a track is held through a detector gap (max 5 frames) only if a blob near the prediction moves in the same direction (within 45°) and at the same speed (0.5 to 1.5x) as the drone;
+   - **verifier**: weak boxes with no layer support count less.
+   Costs about 8 ms per frame on the CPU at 480 px.
 
 ## Scores on the 3 practice videos (IoU 0.5)
 
@@ -19,6 +24,11 @@ Target: real time (50 fps or more) on a Raspberry Pi with the AI HAT+ (Hailo-8, 
 | SkyGuard + tracker | 0.843 | 0.916 | 0.983 | 0.858 | 0 |
 | + trajectory crops | 0.855 | 0.916 | 0.980 | 0.873 | 1 |
 | + boxes clipped to the frame (default, team evaluate.py) | 0.862 | 0.920 | 0.987 | 0.873 | 1 |
+| + fine-tuned 1280 model on the trajectory crops only | 0.871 | 0.932 | 0.990 | 0.880 | 0 |
+| **+ combined shape booster + keeper + verifier (`pipeline_boost.py`, best)** | **0.878** | **0.936** | **0.991** | **0.886** | **0** |
+
+Best setup per video (MOTA): easy 0.958, medium 0.972, hard 0.809. The variants were chosen on these same 3 videos, so the gain on new videos may be a bit smaller.
+Tried and worse: merging two full-frame models' boxes (0.84-0.855), feeding masked / dimmed / black-background frames to the AI (0.51-0.72), extra crops on every blob (0.857), dropping boxes with no blob (0.860).
 
 ## Setup
 
@@ -46,6 +56,19 @@ Score all practice videos:
     python run_video.py --weights <best.pt> --videos ../test_sample_clean --out preds/x --imgsz 1280 --conf 0.01
     python pipeline.py --videos ../test_sample_clean --dets preds/x --out preds/x_trk --weights <best.pt> --no-motion
     python eval_track.py --gt ../test_sample_clean --pred preds/x_trk
+
+Best setup (original SkyGuard on the full frame, fine-tuned 1280 model `ft_1280 epoch 1` on the crops; the fine-tuned weights are not in this repo):
+
+    python run_video.py --weights ../pretrained/drone-detection-yolov11/best.pt --videos ../test_sample_clean --out preds/hf_skyguard --imgsz 1280 --conf 0.01 --keep drone
+    python pipeline_boost.py --videos ../test_sample_clean --dets preds/hf_skyguard --out preds/boost --weights runs/ft_1280/weights/epoch0.pt \
+      --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65
+    python eval_track.py --gt ../test_sample_clean --pred preds/boost
+
+Live demo of the best setup (keys: 1 camera, c white-shape view, 0 all layers, b booster on/off, k keeper on/off, t trails, space pause, q quit;
+yellow box = booster confirmed a faint detection, dashed box = keeper held the track):
+
+    python demo_boost.py                         # hard practice video
+    python demo_boost.py --video path/to/any.mp4 # any video, --video 0 for the camera
 
 Pi-style timing on the Mac (same code, PyTorch instead of Hailo): `python pi_run.py <video.mp4>`.
 
