@@ -62,13 +62,13 @@ def crops(img, centers, size=320):
     tiles, offs = [], []
     for cx, cy in centers:
         x0 = int(min(max(cx - size / 2, 0), max(W - size, 0))); y0 = int(min(max(cy - size / 2, 0), max(H - size, 0)))
-        tiles.append(img[y0:y0 + size, x0:x0 + size]); offs.append((x0, y0))
+        t = cv2.resize(img[y0:y0 + size, x0:x0 + size], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)  # crops enlarged 2x (0.880 -> 0.883)
+        tiles.append(t); offs.append((x0, y0))
     out = []
     if tiles:
-        for r, (x0, y0) in zip(crop_m.predict(tiles, imgsz=640,  # crops enlarged 2x (0.880 -> 0.883)
-                                          conf=0.05, device=dev, verbose=False), offs):
+        for r, (x0, y0) in zip(crop_m.predict(tiles, imgsz=2 * size, conf=0.05, device=dev, verbose=False), offs):
             for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist()):
-                out.append((x1 + x0, y1 + y0, x2 + x0, y2 + y0, c))
+                out.append((x1 / 2 + x0, y1 / 2 + y0, x2 / 2 + x0, y2 / 2 + y0, c))
     return out, offs
 
 

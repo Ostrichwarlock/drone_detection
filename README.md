@@ -27,7 +27,7 @@ Target: real time (50 fps or more) on a Raspberry Pi with the AI HAT+ (Hailo-8, 
 | + fine-tuned 1280 model on the trajectory crops only | 0.871 | 0.932 | 0.990 | 0.880 | 0 |
 | + combined shape booster + keeper + verifier (`pipeline_boost.py`) | 0.878 | 0.936 | 0.991 | 0.886 | 0 |
 | + quick re-acquisition after a sudden stop (tracker.py) | 0.880 | 0.937 | 0.986 | 0.893 | 0 |
-| **+ trajectory crops enlarged 2x (`--crop-imgsz 640`, best)** | **0.883** | **0.939** | **0.988** | **0.894** | **0** |
+| **+ trajectory crops enlarged 2x (`--crop-scale 2`, best)** | **0.883** | **0.939** | **0.988** | **0.894** | **0** |
 
 Best setup per video (MOTA): easy 0.964, medium 0.973, hard 0.816. The variants were chosen on these same 3 videos, so the gain on new videos may be a bit smaller.
 Tried and worse: slowing the Kalman prediction on misses or matching near the last-seen spot (0.865-0.875), stacking past frames / de-blurring the crops (0.870-0.878), inverted-colour frames (0.79-0.83), squeezing crops along the motion direction (0.879-0.882), merging two full-frame models' boxes (0.84-0.855), feeding masked / dimmed / black-background frames to the AI (0.51-0.72), extra crops on every blob (0.857), dropping boxes with no blob (0.860).
@@ -63,7 +63,7 @@ Best setup (original SkyGuard on the full frame, fine-tuned 1280 model `ft_1280 
 
     python run_video.py --weights ../pretrained/drone-detection-yolov11/best.pt --videos ../test_sample_clean --out preds/hf_skyguard --imgsz 1280 --conf 0.01 --keep drone
     python pipeline_boost.py --videos ../test_sample_clean --dets preds/hf_skyguard --out preds/boost --weights runs/ft_1280/weights/epoch0.pt \
-      --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65 --crop-imgsz 640
+      --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65 --crop-scale 2
     python eval_track.py --gt ../test_sample_clean --pred preds/boost
 
 Live demo of the best setup (keys: 1 camera, c white-shape view, 0 all layers, b booster on/off, k keeper on/off, t trails, space pause, q quit;

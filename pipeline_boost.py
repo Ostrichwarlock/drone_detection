@@ -6,7 +6,7 @@ Stages per frame: 1 whole-frame detector (or cached --dets)  2 prediction crops 
 Other experiment flags (blobs crops, plain keeper, agree-filter, mask) were tested and are worse; kept for reference.
 Best setup (whole-frame dets from the ORIGINAL SkyGuard cached with run_video.py --imgsz 1280 --conf 0.01, crops with ft_1280 ep1):
 python pipeline_boost.py --videos ../test_sample_clean --dets preds/hf_skyguard --out preds/boost --weights runs/ft_1280/weights/epoch0.pt \
-  --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65 --crop-imgsz 640
+  --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65 --crop-scale 2
 Note: without --dets the --weights model is also used for the whole frame."""
 import argparse, os, glob, time
 import cv2, numpy as np, torch
@@ -21,6 +21,7 @@ p.add_argument("--dets", default=""); p.add_argument("--motion", default="")
 p.add_argument("--weights", default="../pretrained/drone-detection-yolov11/best.pt")
 p.add_argument("--imgsz", type=int, default=1280, help="whole-frame size (live mode)")
 p.add_argument("--crop", type=int, default=320); p.add_argument("--crop-imgsz", type=int, default=320)
+p.add_argument("--crop-scale", type=float, default=1.0, help="enlarge each crop with cubic resize before the crop model (2 = best, 0.883)")
 p.add_argument("--motion-topk", type=int, default=4)
 p.add_argument("--min-persist", type=int, default=1, help="motion spot must be seen in this many of the 2 previous frames")
 p.add_argument("--no-pred", action="store_true"); p.add_argument("--no-motion", action="store_true")
@@ -62,12 +63,16 @@ def run_crops(img, centers, size):
     H, W = img.shape[:2]; tiles, offs = [], []
     for cx, cy in centers:
         x0 = int(min(max(cx - size / 2, 0), max(W - size, 0))); y0 = int(min(max(cy - size / 2, 0), max(H - size, 0)))
-        tiles.append(img[y0:y0 + size, x0:x0 + size]); offs.append((x0, y0))
-    out = []
+        t = img[y0:y0 + size, x0:x0 + size]
+        if a.crop_scale != 1:
+            t = cv2.resize(t, None, fx=a.crop_scale, fy=a.crop_scale, interpolation=cv2.INTER_CUBIC)
+        tiles.append(t); offs.append((x0, y0))
+    out = []; k = a.crop_scale
     if tiles:
-        for r, (x0, y0) in zip(model.predict(tiles, imgsz=a.crop_imgsz, conf=0.05, device=dev, verbose=False), offs):
+        isz = int(round(a.crop_imgsz * k))
+        for r, (x0, y0) in zip(model.predict(tiles, imgsz=isz, conf=0.05, device=dev, verbose=False), offs):
             for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist()):
-                out.append((x1 + x0, y1 + y0, x2 + x0, y2 + y0, c))
+                out.append((x1 / k + x0, y1 / k + y0, x2 / k + x0, y2 / k + y0, c))
     return out
 
 
