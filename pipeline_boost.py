@@ -6,7 +6,7 @@ Stages per frame: 1 whole-frame detector (or cached --dets)  2 prediction crops 
 Other experiment flags (blobs crops, plain keeper, agree-filter, mask) were tested and are worse; kept for reference.
 Best setup (whole-frame dets from the ORIGINAL SkyGuard cached with run_video.py --imgsz 1280 --conf 0.01, crops with ft_1280 ep1):
 python pipeline_boost.py --videos ../test_sample_clean --dets preds/hf_skyguard --out preds/boost --weights runs/ft_1280/weights/epoch0.pt \
-  --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65
+  --no-motion --layer-width 480 --verify --keeper2 --agree-boost 0.1 --boost-to 0.65 --crop-imgsz 640
 Note: without --dets the --weights model is also used for the whole frame."""
 import argparse, os, glob, time
 import cv2, numpy as np, torch
