@@ -1,0 +1,16 @@
+[project]
+name = "drone-tracking-v2"
+version = "0.883"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "ipykernel",
+    "jupyterlab",
+    "motmetrics",
+    "numpy>=2",
+    "onnx",
+    "onnxruntime",
+    "opencv-python",
+    "pandas",
+    "scipy",
+    "ultralytics==8.4.216",
+]

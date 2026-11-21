@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 drone_data/
+/bird_data/images/
 runs/
 preds/
 demo_out/
