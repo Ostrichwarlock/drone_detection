@@ -4,6 +4,10 @@ Works on any per-frame detection list, so the same code runs offline (on result 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+REACQ_GAP = 30     # frames: how long after losing a drone we may take it back under its own id
+REACQ_CONF = 0.20  # min box confidence for re-acquisition
+REACQ_DIST = 1.5   # max distance from where it was last seen, in drone sizes (grows 15%/frame of gap)
+
 
 class KF:
     """state [cx, cy, w, h, vx, vy, vw, vh]"""
@@ -40,6 +44,7 @@ class Track:
         self.conf = conf; self.last = frame; self.id = None; self.feat = feat
         self.hist = [(frame, tuple(box[:4]), conf)]  # kept while tentative, written out on confirmation
         self.aspect = (box[2] - box[0]) / max(box[3] - box[1], 1)
+        self.last_obs = xyxy_to_cxcywh(box)
 
     def peek(self):
         """predicted box for the NEXT frame, without changing the filter"""
@@ -132,6 +137,29 @@ class TwoDroneTracker:
             self._hit(rest[i], dets[lo[k]], feats[lo[k]], frame); used.add(lo[k])
         for i in ut2:
             rest[i].miss += 1
+        # 2b) RE-ACQUIRE: a drone lost a moment ago (e.g. it stopped / turned and the prediction ran off)
+        #     comes back under its own id straight away from a moderately confident box near where it was last seen,
+        #     instead of waiting for 3 confident frames as a brand-new track
+        if REACQ_GAP > 0 and self.lost:
+            cand = [j for j, d in enumerate(dets) if j not in used and d[4] >= REACQ_CONF]
+            L = [(i, t) for i, t in self.lost.items() if 0 < frame - t.last <= REACQ_GAP and i not in {a.id for a in self.active}]
+            if cand and L:
+                C = np.full((len(L), len(cand)), 1e6)
+                for r, (i, t) in enumerate(L):
+                    lx, ly, lw, lh = t.last_obs; s = max(lw, lh, 12); gap = frame - t.last
+                    for c_, j in enumerate(cand):
+                        dx, dy, dw, dh = xyxy_to_cxcywh(dets[j][:4])
+                        dist = np.hypot(dx - lx, dy - ly) / (s * (1 + 0.15 * gap))
+                        size = abs(np.log(max(dw * dh, 1) / max(lw * lh, 1)))
+                        if dist < REACQ_DIST and size < 1.0:
+                            C[r, c_] = dist + 0.5 * size
+                rr, cc = linear_sum_assignment(C)
+                for r, c_ in zip(rr, cc):
+                    if C[r, c_] >= 1e5 or len(self.active) >= self.max_ids:
+                        continue
+                    i, t = L[r]; j = cand[c_]; d = dets[j]
+                    t.kf = KF(xyxy_to_cxcywh(d[:4])); t.miss = 0; t.hits += 1; t.conf = d[4]; t.last = frame
+                    t.last_obs = xyxy_to_cxcywh(d[:4]); self.lost.pop(i); self.active.append(t); used.add(j)
         # 3) tentative tracks <- leftover confident detections
         left = [j for j in hi if j not in used]
         m3, ut3, ud3 = match(self.tentative, [dets[j] for j in left], P["gate"])
@@ -188,7 +216,7 @@ class TwoDroneTracker:
         return out
 
     def _hit(self, t, d, feat, frame):
-        t.kf.update(xyxy_to_cxcywh(d[:4])); t.hits += 1; t.miss = 0; t.conf = d[4]; t.last = frame
+        t.last_obs = xyxy_to_cxcywh(d[:4]); t.kf.update(xyxy_to_cxcywh(d[:4])); t.hits += 1; t.miss = 0; t.conf = d[4]; t.last = frame
         if t.id is None:
             t.hist.append((frame, tuple(d[:4]), d[4]))
         a = (d[2] - d[0]) / max(d[3] - d[1], 1); t.aspect = 0.9 * t.aspect + 0.1 * a

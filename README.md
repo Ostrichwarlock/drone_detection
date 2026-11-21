@@ -7,7 +7,7 @@ Target: real time (50 fps or more) on a Raspberry Pi with the AI HAT+ (Hailo-8, 
 ## How it works
 
 1. **Detector**: YOLO11n ([SkyGuardAI/drone-detection-yolov11](https://huggingface.co/SkyGuardAI/drone-detection-yolov11), MIT), being fine-tuned on our data.
-2. **Tracker** (`tracker.py`): Kalman filter + two-threshold matching, at most 2 ids, re-identifies a returning drone by appearance (colour/brightness histogram, shape) and position.
+2. **Tracker** (`tracker.py`): Kalman filter + two-threshold matching, at most 2 ids, re-identifies a returning drone by appearance (colour/brightness histogram, shape) and position. Quick re-acquisition: a drone lost less than 30 frames ago (for example after a sudden stop, when the prediction runs ahead) gets its own id back at once from a box with confidence 0.2 or more near where it was last seen and of similar size, instead of waiting 3 frames as a new track.
 3. **Trajectory crops** (`stack.py`): where the tracker expects a drone, a zoomed crop is checked again, which finds small drones the full-frame pass misses.
 4. **Extra input layers** (`layers.py`, for the multi-channel model B, not trained yet): short / long / background difference (camera-shake compensated), tracker map, previous frame, brightness shape.
 5. **Motion detector** (`motion_live.py`): kept for the views; motion crops are off by default (they did not improve the score).
@@ -25,10 +25,11 @@ Target: real time (50 fps or more) on a Raspberry Pi with the AI HAT+ (Hailo-8, 
 | + trajectory crops | 0.855 | 0.916 | 0.980 | 0.873 | 1 |
 | + boxes clipped to the frame (default, team evaluate.py) | 0.862 | 0.920 | 0.987 | 0.873 | 1 |
 | + fine-tuned 1280 model on the trajectory crops only | 0.871 | 0.932 | 0.990 | 0.880 | 0 |
-| **+ combined shape booster + keeper + verifier (`pipeline_boost.py`, best)** | **0.878** | **0.936** | **0.991** | **0.886** | **0** |
+| + combined shape booster + keeper + verifier (`pipeline_boost.py`) | 0.878 | 0.936 | 0.991 | 0.886 | 0 |
+| **+ quick re-acquisition after a sudden stop (tracker.py, best)** | **0.880** | **0.937** | **0.986** | **0.893** | **0** |
 
-Best setup per video (MOTA): easy 0.958, medium 0.972, hard 0.809. The variants were chosen on these same 3 videos, so the gain on new videos may be a bit smaller.
-Tried and worse: merging two full-frame models' boxes (0.84-0.855), feeding masked / dimmed / black-background frames to the AI (0.51-0.72), extra crops on every blob (0.857), dropping boxes with no blob (0.860).
+Best setup per video (MOTA): easy 0.958, medium 0.972, hard 0.814. The variants were chosen on these same 3 videos, so the gain on new videos may be a bit smaller.
+Tried and worse: slowing the Kalman prediction on misses or matching near the last-seen spot (0.865-0.875), stacking past frames / de-blurring the crops (0.870-0.878), inverted-colour frames (0.79-0.83), merging two full-frame models' boxes (0.84-0.855), feeding masked / dimmed / black-background frames to the AI (0.51-0.72), extra crops on every blob (0.857), dropping boxes with no blob (0.860).
 
 ## Setup
 
